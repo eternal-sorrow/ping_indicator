@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# vim:set ts=4 noet:
+
+import subprocess, re, signal, time
+from threading import Thread
+
+wait_interval=1
+good=1000
+bad=9999
+green="\033[00;32m"
+brown="\033[00;33m"
+red="\033[00;31m"
+
+ping_process=subprocess.Popen(["ping", "8.8.8.8"], stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+
+try:
+	num=0
+	pinged=False
+	def read_func():
+		global num
+		global timestamp
+		global pinged
+		line=ping_process.stdout.readline()[:-1].decode()
+
+		try:
+			num=int(float(re.sub("^.* time=(\d+\.?\d*) ms.*$","\\1",line)))
+			timestamp=time.time()
+			pinged=True
+		except ValueError:
+			print(line)
+
+
+	print(ping_process.stdout.readline()[:-1].decode())
+	timestamp=time.time()
+
+	read_thread=Thread(target=read_func)
+	read_thread.start()
+
+
+
+	while ping_process.poll() == None:
+		read_thread.join(wait_interval)
+
+		if not read_thread.is_alive():
+			read_thread=Thread(target=read_func)
+			read_thread.start()
+			if pinged:
+				interval=num
+				pinged=False
+			else:
+				interval=num+int((time.time()-timestamp)*1000)
+		else:
+			interval=num+int((time.time()-timestamp)*1000)
+
+		if interval < good:
+			color=green
+		elif interval > bad:
+			color=red
+		else:
+			color=brown
+
+		print("\33[2K{}{}\033[00m\r".format(color,str(interval)),end="")
+
+except KeyboardInterrupt:
+	ping_process.send_signal(signal.SIGINT)
+
+print(ping_process.stdout.readline()[:-1].decode())
+print(ping_process.stdout.readline()[:-1].decode())
+print(ping_process.stdout.readline()[:-1].decode())
+
+exit(ping_process.returncode)
+
